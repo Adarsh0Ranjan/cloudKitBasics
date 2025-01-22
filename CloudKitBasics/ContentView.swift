@@ -8,6 +8,9 @@
 import SwiftUI
 import CloudKit
 
+import SwiftUI
+import CloudKit
+
 struct ContentView: View {
     @StateObject var viewModel = CloudKitViewModel()
     
@@ -22,6 +25,17 @@ struct ContentView: View {
             Text(viewModel.isSignedInToiCloud ? "Signed into iCloud" : "Not signed into iCloud")
                 .font(.title2)
                 .fontWeight(.bold)
+            
+            if viewModel.isSignedInToiCloud, let userName = viewModel.userName {
+                Text("Welcome, \(userName)")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.blue)
+            }
+            
+            Text("Permission Granted: \(viewModel.permissionStatus ? "Yes" : "No")")
+                .font(.headline)
+                .foregroundColor(viewModel.permissionStatus ? .green : .orange)
             
             if !viewModel.error.isEmpty {
                 Text(viewModel.error)
@@ -38,9 +52,78 @@ class CloudKitViewModel: ObservableObject {
     
     @Published var isSignedInToiCloud = false
     @Published var error = ""
+    @Published var userName: String? = ""
+    @Published var permissionStatus = false
     init() {
         getCloudKitStatus()
     }
+    
+    func discoverCloudUser(id: CKRecord.ID) {
+        CKContainer.default().discoverUserIdentity(withUserRecordID: id) { identity, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error discovering user identity: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let identity = identity {
+                    let firstName = identity.nameComponents?.givenName ?? "Unknown"
+                    let lastName = identity.nameComponents?.familyName ?? "Unknown"
+                    print("User name: \(firstName) \(lastName)")
+                    self.userName = "\(firstName) \(lastName)"
+                } else {
+                    print("No user identity found.")
+                }
+            }
+        }
+    }
+    
+    func fetchiCloudUserId() {
+        CKContainer.default().fetchUserRecordID { recordID, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error fetching iCloud user ID: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let recordID = recordID {
+                    print("Fetched iCloud user ID: \(recordID.recordName)")
+                    // You can now use this record ID to fetch user identity details if needed
+                    self.discoverCloudUser(id: recordID)
+                } else {
+                    print("No iCloud user ID found.")
+                }
+            }
+        }
+    }
+    
+    func requestPermission() {
+        CKContainer.default().requestApplicationPermission([.userDiscoverability]) { status, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error requesting permission: \(error.localizedDescription)")
+                    return
+                }
+                
+                switch status {
+                case .granted:
+                    print("User discoverability permission granted.")
+                    self.permissionStatus = true
+                    self.fetchiCloudUserId()  // Proceed to fetch user ID after permission is granted
+                case .denied:
+                    print("User discoverability permission denied.")
+                case .couldNotComplete:
+                    print("Could not complete the permission request. Try again later.")
+                case .initialState:
+                    print("User has not been prompted yet for permission.")
+                @unknown default:
+                    print("Unknown permission status.")
+                }
+            }
+        }
+    }
+
+
     
     func getCloudKitStatus() {
         CKContainer.default().accountStatus { status, error in
@@ -63,6 +146,7 @@ class CloudKitViewModel: ObservableObject {
                 
                 if accountStatus == .available {
                     self.isSignedInToiCloud = true
+                    self.requestPermission()
                 } else {
                     self.error = accountStatus.errorMessage
                 }

@@ -6,7 +6,7 @@
 	<string>development</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.roro.adarsh.cloudKItDemo</string>
+		<string>iCloud.io.roro.cloudKitContainer</string>
 	</array>
 	<key>com.apple.developer.icloud-services</key>
 	<array>
